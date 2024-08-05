@@ -150,43 +150,6 @@ class GoogleDriveClient():
             file = self.__drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
             print(f"Uploaded {file_name} to Drive with file ID {file.get('id')}")
 
-    # def sync_folder(self, local_folder_path, drive_folder_id):
-    #     for root, dirs, files in os.walk(local_folder_path):
-    #         for dir_name in dirs:
-    #             local_dir_path = os.path.join(root, dir_name)
-    #             drive_folder = self.get_drive_file(dir_name, drive_folder_id)
-    #             if not drive_folder:
-    #                 drive_folder_id = self.create_drive_folder(dir_name, drive_folder_id)
-    #             else:
-    #                 drive_folder_id = drive_folder.get("id")
-    #             self.sync_folder(local_dir_path, drive_folder_id)
-    #         for file_name in files:
-    #             local_file_path = os.path.join(root, file_name)
-    #             self.upload_file(local_file_path, drive_folder_id)
-
-    # =====================================================================
-    # def sync_folder(self, local_folder_path, drive_folder_id):
-    #     for root, dirs, files in os.walk(local_folder_path):
-    #         rel_path = os.path.relpath(root, local_folder_path)
-    #         parent_id = drive_folder_id
-            
-    #         if rel_path != ".":
-    #             parent_folder_name = os.path.basename(rel_path)
-    #             parent_drive_folder = self.get_drive_file(parent_folder_name, drive_folder_id)
-    #             if parent_drive_folder:
-    #                 parent_id = parent_drive_folder.get("id")
-    #             else:
-    #                 parent_id = self.create_drive_folder(parent_folder_name, drive_folder_id)
-            
-    #         for dir_name in dirs:
-    #             dir_path = os.path.join(root, dir_name)
-    #             self.sync_folder(dir_path, parent_id)
-            
-    #         for file_name in files:
-    #             file_path = os.path.join(root, file_name)
-    #             self.upload_file(file_path, parent_id)
-    # =====================================================================
-    # =====================================================================
     def sync_folder(self, local_folder_path, drive_folder_id):
         for root, dirs, files in os.walk(local_folder_path):
             # Calculate relative path from local folder to current directory
@@ -207,7 +170,6 @@ class GoogleDriveClient():
             for file_name in files:
                 file_path = os.path.join(root, file_name)
                 self.upload_file(file_path, current_folder_id)
-    # =====================================================================
 
     def sync(self):
         self.sync_folder(self.__local_folder, self.__drive_folder)
