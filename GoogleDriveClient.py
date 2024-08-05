@@ -5,6 +5,7 @@ import sys
 import hashlib
 import pickle
 import mimetypes
+import argparse
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -13,10 +14,16 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 class GoogleDriveClient():
+    """
+    A client to sync local files and folders with Google Drive.
+    """
     # private data members (__)
     # protected data members (_)
 
     def __init__(self, local_folder, drive_folder):
+        """
+        Initialize the Google Drive client with the local and drive folder paths.
+        """
         self.__api_name = "drive"
         self.__api_version = "v3"
         self.__credential_file = "credentials.json"
@@ -29,12 +36,14 @@ class GoogleDriveClient():
         self.__drive_service = None
         self.__local_folder = local_folder
         # self.__drive_folder = drive_folder
-
         # self.__hashes = self.load_hashes()
+        # Authenticate and initialize the Google Drive API service
         self.authenticate()
+        # Get or create the root folder on Google Drive
         self.__drive_folder = self.get_or_create_drive_folder(drive_folder)
 
     def authenticate(self):
+        """Authenticate the user and initialize the Drive API service."""
         # Load credentials from file
         if os.path.exists( self.__token_file ):
             self.__creds = Credentials.from_authorized_user_file(self.__token_file, self.__scopes)
@@ -56,6 +65,9 @@ class GoogleDriveClient():
         self.__drive_service = build(self.__api_name, self.__api_version, credentials=self.__creds)
 
     def get_drive_file(self, file_name, parent_id):
+        """
+        Get a file or folder by name from Google Drive under the specified parent folder.
+        """
         try:
             results = self.__drive_service.files().list(
                 q=f"name='{file_name}' and '{parent_id}' in parents and trashed != True",
@@ -70,6 +82,9 @@ class GoogleDriveClient():
         return None
     
     def create_drive_folder(self, folder_name, parent_id):
+        """
+        Create a new folder on Google Drive under the specified parent folder.
+        """
         folder_metadata = {
             "name": folder_name,
             "mimeType": "application/vnd.google-apps.folder",
@@ -79,6 +94,9 @@ class GoogleDriveClient():
         return folder.get("id")
 
     def get_or_create_drive_folder(self, folder_name, parent_id="root"):
+        """
+        Retrieve an existing folder by name or create a new one on Google Drive.
+        """
         existing_folder = self.get_drive_file(folder_name, parent_id)
         if existing_folder:
             return existing_folder.get("id")
@@ -87,6 +105,9 @@ class GoogleDriveClient():
 
     @staticmethod
     def get_file_hash(file_path):
+        """
+        Calculate the MD5 hash of a local file.
+        """
         # checksum = hashlib.md5(open(file_path, "rb").read()).hexdigest()
         hash_md5 = hashlib.md5()
         with open(file_path, "rb") as f:
@@ -119,6 +140,9 @@ class GoogleDriveClient():
     #     self.save_hashes()
 
     def upload_file(self, file_path, parent_id):
+        """
+        Upload a file to Google Drive, updating it if necessary.
+        """
         file_name = os.path.basename(file_path)
         local_hash = self.get_file_hash(file_path)
         
@@ -150,39 +174,66 @@ class GoogleDriveClient():
             file = self.__drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
             print(f"Uploaded {file_name} to Drive with file ID {file.get('id')}")
 
+    # def sync_folder(self, local_folder_path, drive_folder_id):
+    #     """
+    #     Sync all files and subfolders from a local folder to Google Drive.
+    #     """
+    #     for root, dirs, files in os.walk(local_folder_path):
+    #         # Calculate relative path from local folder to current directory
+    #         rel_path = os.path.relpath(root, local_folder_path)
+    #         # Find the correct parent_id on Google Drive
+    #         current_folder_id = drive_folder_id
+
+    #         if rel_path != ".":
+    #             # Create or get the folder on Google Drive
+    #             folder_names = rel_path.split(os.sep)
+    #             for folder_name in folder_names:
+    #                 current_folder = self.get_drive_file(folder_name, current_folder_id)
+    #                 if not current_folder:
+    #                     current_folder_id = self.create_drive_folder(folder_name, current_folder_id)
+    #                 else:
+    #                     current_folder_id = current_folder.get("id")
+
+    #         for file_name in files:
+    #             file_path = os.path.join(root, file_name)
+    #             self.upload_file(file_path, current_folder_id)
+
     def sync_folder(self, local_folder_path, drive_folder_id):
-        for root, dirs, files in os.walk(local_folder_path):
-            # Calculate relative path from local folder to current directory
-            rel_path = os.path.relpath(root, local_folder_path)
-            # Find the correct parent_id on Google Drive
-            current_folder_id = drive_folder_id
-
-            if rel_path != ".":
-                # Create or get the folder on Google Drive
-                folder_names = rel_path.split(os.sep)
-                for folder_name in folder_names:
-                    current_folder = self.get_drive_file(folder_name, current_folder_id)
-                    if not current_folder:
-                        current_folder_id = self.create_drive_folder(folder_name, current_folder_id)
-                    else:
-                        current_folder_id = current_folder.get("id")
-
-            for file_name in files:
-                file_path = os.path.join(root, file_name)
-                self.upload_file(file_path, current_folder_id)
+        """
+        Recursively sync all files and subfolders from a local folder to Google Drive.
+        """
+        for entry in os.scandir(local_folder_path):
+            if entry.is_dir():
+                subfolder_id = self.get_or_create_drive_folder(entry.name, drive_folder_id)
+                self.sync_folder(entry.path, subfolder_id)
+            elif entry.is_file():
+                self.upload_file(entry.path, drive_folder_id)
 
     def sync(self):
+        """Start the synchronization process."""
         self.sync_folder(self.__local_folder, self.__drive_folder)
 
 
+# def main():
+#     local_folder = "C:\\Users\\kasun\\Desktop\\New folder (3)"
+#     drive_folder = "Share"
+#     try:
+#         sync = GoogleDriveClient(local_folder, drive_folder)
+#         sync.sync()
+#     except Exception as e:
+#         print("Error : " + str(e))
+
 def main():
-    local_folder = "C:\\Users\\kasun\\Desktop\\New folder (3)"
-    drive_folder = "Share"
+    parser = argparse.ArgumentParser(description="Sync local files and folders with Google Drive.")
+    parser.add_argument("local_folder", type=str, help="Path to the local folder to sync.")
+    parser.add_argument("drive_folder", type=str, help="Name of the Google Drive folder to sync with.")
+    args = parser.parse_args()
+
     try:
-        sync = GoogleDriveClient(local_folder, drive_folder)
-        sync.sync()
+        drive_client = GoogleDriveClient(args.local_folder, args.drive_folder)
+        drive_client.sync()
     except Exception as e:
-        print("Error : " + str(e))
+        print("Error:", str(e))
 
 if __name__ == "__main__":
     main()
